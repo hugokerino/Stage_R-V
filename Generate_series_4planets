@@ -207,6 +207,8 @@ for i in range(1,5):
     y_tot = y_pl + time_series[:,i-1]
     time_series[:,i] = y_tot
     LS[:,i] = LombScargle(t_ir, y_tot,normalization='standard').power(freq,method='cython')
+  
+    
     
 #%%
 plt.close("all")

@@ -63,7 +63,7 @@ cste        = 1.4e-4 # (m/s)**2/Hz
 params_gr = [A1, A2, A3, B1, B2, B3, C1, C2, C3, AL, Gm, nu0, cste]
 
 
-N = 2001 # number of data point in a regularly sampled grid
+N = 201 # number of data point in a regularly sampled grid
 Ttot = 200 # days
 t = np.linspace(0,Ttot,N)
 dt = Ttot/(N-1)
@@ -84,7 +84,9 @@ for i in range(Nbr_test):
     Y.append(y[2])
     p_i = 1.0/len(y[2]) * np.abs(np.fft.fftshift(np.fft.fft(y[2])))**2 
     P.append(p_i[round(len(p_i)/2)+1:len(p_i)-1])
-    P_GLS.append(LombScargle(t*3600*24, y[2],normalization='psd').power(y[0],method='slow'))
+    P_GLS.append(LombScargle(t*3600*24, y[2],normalization='psd').power(y[0],method='cython'))
+
+    
 
 #%%
 Y_moy = np.mean(Y, axis = 0)
@@ -97,7 +99,7 @@ freq_g = np.linspace(freq[0],freq[-1],len(P_GLS_moy))
 #%%
 plt.close("all")
 plt.figure(1)
-plt.subplot(511), plt.plot(freq, DSP_cible*len(freq)/2),plt.title("DSP cible") #
+plt.subplot(511), plt.plot(freq, DSP_cible),plt.title("DSP cible") #
 plt.subplot(513), plt.plot(freq_p, P_moy),plt.title("Periodogramme moyenné")
 plt.subplot(515), plt.plot(freq_g, P_GLS_moy ), plt.title("GLS moyenné")
 
@@ -113,4 +115,5 @@ plt.legend()
 #%%
 plt.figure(3)
 plt.plot(t,Y_moy, label ="serie temporelle moyenné")
+plt.plot(t,y_real, label ="serie temporelle")
 plt.legend()

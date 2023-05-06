@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Created on Fri May  5 14:51:43 2023
+Created on Sat May  6 13:52:15 2023
 
 @author: hkerino
 """
-
 import numpy as np
 import matplotlib.pyplot as plt
 import george
@@ -14,9 +13,6 @@ from astropy.timeseries import LombScargle
 import random 
 from scipy.stats import loguniform, gamma, uniform
 import time 
-
-import warnings
-warnings.filterwarnings("ignore")
 
 
 #%%
@@ -63,6 +59,8 @@ def lorentzian_components(params_gr, t):
         ysyn[i] = np.sum(np.sqrt(VPSD)*np.sin(2*np.pi*t[i]*freq+phase))
        
     return ysyn
+
+
 
 
 def generate_regular_data_H0(params_gr, params_act, N, t):
@@ -121,6 +119,8 @@ def generate_regular_data_H0(params_gr, params_act, N, t):
     return ytot, yerr
 
 
+
+
 def generate_planete(params_pl,t):
     """
     - params_pl
@@ -131,39 +131,75 @@ def generate_planete(params_pl,t):
     Ppl, K, T0 = params_pl
     return K*np.sin(2*np.pi*(t-T0)/Ppl)
 
-#%%
-#Over-sampling
-Ttot = 200 # days
-facteur_surech = 10
-N = Ttot*facteur_surech +1 # number of data point in a regularly sampled grid
-t = np.linspace(0,Ttot,N) #days
-dt = Ttot*facteur_surech/(N-1)
 
-# Irregular sampling 1 : with normal distribution
-facteur_ech = 10
-t_ir1 = np.zeros(Ttot)
 
-ind0 = round( 0 + facteur_ech*np.abs(np.random.normal(0, 0.1)))
-t_ir1[0] = t[ ind0 ]
-ind_fin = round( (N-1) - facteur_ech*np.abs(np.random.normal(0, 0.1)))
-t_ir1[-1] = t[ ind_fin ]
+def generate_4_periodogrammes(t,f, y, freq_pl):
+    """
+    Parameters
+    ----------
+    t : time (day)
+    f : frequency ( day⁻1)
+    y : original time serie
 
-pas = N/Ttot
-for i in range(Ttot-2):
-    ind = round((i+1)*pas+facteur_ech*np.random.normal(0, 0.1))
-    t_ir1[i+1] =  t[ind]
+    Returns
+    -------
+    4 times series with their lomb-scargle 
+    """
+    y_t = np.zeros((len(t), 4))
+    LS  = np.zeros((len(f), 4))
+    label= np.zeros(4)
     
-# Irregular sampling 2 :Random sampling
-t_ir2 = np.zeros(Ttot)
-indices = np.sort(np.random.choice(N,Ttot,replace=False))
-count=0
-for i in range(Ttot):
-    t_ir2[i]  =  t[indices[count]]
-    count +=1
+    y_t[:,0] = y 
+    
+    for i in range(3):
+        LS[:,i] = LombScargle(t, y_t[:,i]).power(f,method='cython')
+        best_freq = f[np.argmax(LS[:,i])]
+        print(best_freq)
+        if (any(round(best_freq,3) == freq_pl)):
+            label[i] = 1
+        else:
+            label[i] = -1
+            
+        y_fit = LombScargle(t, y_t[:,i]).model(t,best_freq)
+        y_t[:,i+1] = y_t[:,i] - y_fit
+       
+    LS[:,3] = LombScargle(t, y_t[:,3]).power(f,method='cython')
+    
+    return LS,label      
+
+
+
+def generate_data(t,dt,Ttot,freq,params_gr, params_act):
+    
+    time_series = np.zeros((len(t),5))
+    LS = np.zeros((len(freq),5,4))
+    freq_pl = np.zeros(5)
+    label = np.zeros((5,4))
+    
+    y_noise, yerr = generate_regular_data_H0(params_gr, params_act, len(t), t) 
+    
+    time_series[:,0] = y_noise #Without planet
+    LS[:,0,:], label[0,:] = generate_4_periodogrammes(t, freq, y_noise, freq_pl) #Without planet
+    
+    for i in range(1,5):
+        print(freq_pl)
+        Ppl = random.uniform(10*dt,Ttot/2)
+        K = loguniform.rvs(0.1, 10)*5
+        T0 =  random.uniform(0,Ppl)
+        params_pl = [Ppl,K,T0]
+        freq_pl[i] = round(1/Ppl,3)
+        
+        y_pl = generate_planete(params_pl, t)
+        y_tot = y_pl + time_series[:,i-1]
+        time_series[:,i] = y_tot
+        LS[:,i,:], label[i,:] = generate_4_periodogrammes(t, freq, y_tot,freq_pl)
+      
+    return time_series, LS, label
+
 
 #%%
-#Parameters for time series
-## Grannulation + Oscillation
+#Parameters for activity signal
+# Grannulation + Oscillation
 A1, A2, A3  = 0.027, 0.003, 0.3*1e-3 # m/s
 B1, B2, B3  = 7.4*3600, 1.2*3600, 17.9*60 # seconds
 C1, C2, C3  = 3.1, 3.9, 8.9 # dimensionless
@@ -175,102 +211,53 @@ params_gr = [A1, A2, A3, B1, B2, B3, C1, C2, C3, AL, Gm, nu0, cste]
 ##Activity signal
 Prot = 62 # days -- Prot to be chosen randomly in HARPS sample (see paper)
 
-amp = 5
-epsilon = 1
-tau = 150
-# amp  = gamma.rvs(2.0, 0.5) 
-# epsilon = uniform.rvs(0.5, 1)
-# tau = np.random.normal(3*Prot, 0.1*Prot) 
+amp  = gamma.rvs(2.0, 0.5) 
+epsilon = uniform.rvs(0.5, 1)
+tau = np.random.normal(3*Prot, 0.1*Prot) 
 gam  = 2.0/epsilon #not change
 logP = np.log(Prot) #not change 
 met  = 1.0 # not change 
 
 params_act = [amp, gam, logP, met]
 
-##Planet
-Ppl = 50
-K=5
-T0 = Ppl/2
-# Ppl = random.uniform(10*dt,Ttot/2)
-# K = loguniform.rvs(0.1, 10)
-# T0 =  random.uniform(0,Ppl)
-
-params_pl = [Ppl,K,T0]
-#params_pl = 0
-
-
 #%%
-#Create the time series
-y_noise, yerr = generate_regular_data_H0(params_gr, params_act, N, t)
-y_noise1, yerr_ir1 = generate_regular_data_H0(params_gr, params_act, Ttot, t_ir1)
-y_noise2, yerr_ir2 = generate_regular_data_H0(params_gr, params_act, Ttot, t_ir2)
+#Over-sampling
+Ttot = 200 # days
+facteur_surech = 10
+N = Ttot*facteur_surech +1 # number of data point in a regularly sampled grid
+t_over = np.linspace(0,Ttot,N) #days
+dt = Ttot*facteur_surech/(N-1) #After sampling
 
-#Add planete signal if there is one
-if (params_pl !=0):
-    ypl = generate_planete(params_pl, t)
-    ypl1= generate_planete(params_pl,t_ir1)
-    ypl2= generate_planete(params_pl,t_ir2)
-    y_ir1 = ypl1 + y_noise1
-    y_ir2 = ypl2 + y_noise2
-    y = ypl + y_noise
+
+# Irregular sampling 1 : with normal distribution
+facteur_ech = 10
+t = np.zeros(Ttot)
+
+ind0 = round( 0 + facteur_ech*np.abs(np.random.normal(0, 0.1)))
+t[0] = t_over[ ind0 ]
+ind_fin = round( (N-1) - facteur_ech*np.abs(np.random.normal(0, 0.1)))
+t[-1] = t_over[ ind_fin ]
+
+pas = N/Ttot
+for i in range(Ttot-2):
+    ind = round((i+1)*pas+facteur_ech*np.random.normal(0, 0.1))
+    t[i+1] =  t_over[ind]
     
-else:
-    y_ir1 = y_noise1
-    y_ir2 = y_noise2
-    y = y_noise
-
-#%%
-#Plot
-plt.close("all")
-sigma1 = np.std(yerr_ir1)
-sigma2 = np.std(yerr_ir2)
-
-plt.figure(num=1,figsize=(12,6))
-
-plt.subplot(511) 
-plt.plot(t,y),plt.title("With oversampling")
-
-plt.subplot(513) 
-plt.errorbar(t_ir1,y_ir1,zorder=0), plt.errorbar(t_ir1,y_ir1, sigma1,fmt='k.', zorder = 1), plt.title("Iregular sampling 1 : quasi-uniformly distributed")
-
-plt.subplot(515) 
-plt.errorbar(t_ir2,y_ir2,zorder=0), plt.errorbar(t_ir2,y_ir2, sigma2,fmt='k.', zorder = 1), plt.title("Iregular sampling 2 : randomly choice")
-    
-#%%
-#Frequency analysis
 fmin = 1/Ttot
 fmax = (1/dt)/2
 freq = np.arange(fmin,fmax,fmin/10)
 
-#Irregular sampling 1
-start = time.time()
-GLS_ir1 = LombScargle(t_ir1, y_ir1,sigma1*np.ones(len(y_ir1)),normalization='standard').power(freq,method='cython')
-diff2 = time.time() - start
+#%%
+time_series, LS, label = generate_data(t, dt, Ttot, freq, params_gr, params_act)
 
-#Irregular sampling 2
-GLS_ir2 = LombScargle(t_ir2, y_ir2,sigma2*np.ones(len(y_ir2)),normalization='standard').power(freq,method='cython')
+# --- Time series contains 5 RV generated with the same noise (activity stelar), with adding
+#consecutively planet until 4 planets were injected
+# --- LS contains Lomb Scargle periodogramme corresponding to the time series, for each RV,
+# 4 periodogramme generated by create a new time serie with removing best frequency sin fit
+# --- label contains 1 if the best frequency removed from the periodogramme is a frequency
+# correspond to a planet
 
-#plot
-plt.figure(2)
-plt.suptitle("Lomb-Scargle periodograme")
-plt.subplot(121)
-plt.plot(freq,GLS_ir1,label='Quasi uniformly time sampling')
-plt.plot(freq,GLS_ir2,label='Randomly sampling')
 
-if(params_pl != 0):    
-    plt.plot([(1/Ppl),(1/Ppl)],[min(min(GLS_ir1),min(GLS_ir2)), max(max(GLS_ir1),max(GLS_ir2))],'r--')
 
-plt.xlabel("Frequence [d⁻¹]")
-plt.ylabel("Amplitude(m/s)²")
-plt.legend()
 
-plt.subplot(122)
-plt.semilogx(np.flip(1/freq),np.flip(GLS_ir1), label='Quasi uniformly time sampling' )
-plt.semilogx(np.flip(1/freq),np.flip(GLS_ir2),label='Randomly sampling')
 
-if(params_pl != 0):    
-    plt.plot([(Ppl),(Ppl)],[min(min(GLS_ir1),min(GLS_ir2)), max(max(GLS_ir1),max(GLS_ir2))],'r--')
-
-plt.xlabel("Time (days)")
-plt.ylabel("Amplitude(m/s)²")
-plt.legend()
