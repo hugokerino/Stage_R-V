@@ -133,6 +133,40 @@ def generate_planete(params_pl,t):
 
 
 
+def print_4periodogramme(LS_p,label,i,freq_pl):
+    
+    LS = LS_p[:,i,:]
+    f1,f2,f3,f4 = freq_pl
+    l1,l2,l3,l4 = label[i,:]
+    
+    plt.figure()
+    plt.subplot(411),plt.plot(freq, LS[:,0] , label =l1), plt.legend()
+    plt.plot([f1,f1] , [min(LS[:,0]),max(LS[:,0])],'r--')
+    plt.plot([f2,f2] , [min(LS[:,0]),max(LS[:,0])],'g--')
+    plt.plot([f3,f3] , [min(LS[:,0]),max(LS[:,0])],'b--')
+    plt.plot([f4,f4] , [min(LS[:,0]),max(LS[:,0])],'y--')
+
+    plt.subplot(412), plt.plot(freq, LS[:,1] , label =l2), plt.legend()
+    plt.plot([f1,f1] , [min(LS[:,1]),max(LS[:,1])],'r--')
+    plt.plot([f2,f2] , [min(LS[:,1]),max(LS[:,1])],'g--')
+    plt.plot([f3,f3] , [min(LS[:,1]),max(LS[:,1])],'b--')
+    plt.plot([f4,f4] , [min(LS[:,1]),max(LS[:,1])],'y--')
+
+    plt.subplot(413), plt.plot(freq, LS[:,2] , label =l3), plt.legend()
+    plt.plot([f1,f1] , [min(LS[:,2]),max(LS[:,2])],'r--')
+    plt.plot([f2,f2] , [min(LS[:,2]),max(LS[:,2])],'g--')
+    plt.plot([f3,f3] , [min(LS[:,2]),max(LS[:,2])],'b--')
+    plt.plot([f4,f4] , [min(LS[:,2]),max(LS[:,2])],'y--')
+
+    plt.subplot(414 ), plt.plot(freq, LS[:,3] , label =l4), plt.legend()
+    plt.plot([f1,f1] , [min(LS[:,3]),max(LS[:,3])],'r--')
+    plt.plot([f2,f2] , [min(LS[:,3]),max(LS[:,3])],'g--')
+    plt.plot([f3,f3] , [min(LS[:,3]),max(LS[:,3])],'b--')
+    plt.plot([f4,f4] , [min(LS[:,3]),max(LS[:,3])],'y--')
+    plt.xlabel("Frequency (day⁻¹)")
+    plt.ylabel("Power")
+    
+
 def generate_4_periodogrammes(t,f, y, freq_pl):
     """
     Parameters
@@ -153,9 +187,9 @@ def generate_4_periodogrammes(t,f, y, freq_pl):
     
     for i in range(3):
         LS[:,i] = LombScargle(t, y_t[:,i]).power(f,method='cython')
-        best_freq = f[np.argmax(LS[:,i])]
-        print(best_freq)
-        if (any(round(best_freq,3) == freq_pl)):
+        best_freq = round(f[np.argmax(LS[:,i])],3)
+        print("meilleur fit : ",best_freq)
+        if (any(best_freq == freq_pl)):
             label[i] = 1
         else:
             label[i] = -1
@@ -164,7 +198,14 @@ def generate_4_periodogrammes(t,f, y, freq_pl):
         y_t[:,i+1] = y_t[:,i] - y_fit
        
     LS[:,3] = LombScargle(t, y_t[:,3]).power(f,method='cython')
+    best_freq = round(f[np.argmax(LS[:,3])],3)
+    print("meilleur fit : ",best_freq)
+    if (any(best_freq == freq_pl)):
+        label[3] = 1
+    else:
+        label[3] = -1
     
+    print("label = ", label)
     return LS,label      
 
 
@@ -173,28 +214,30 @@ def generate_data(t,dt,Ttot,freq,params_gr, params_act):
     
     time_series = np.zeros((len(t),5))
     LS = np.zeros((len(freq),5,4))
-    freq_pl = np.zeros(5)
+    freq_pl = np.zeros(4)
     label = np.zeros((5,4))
     
     y_noise, yerr = generate_regular_data_H0(params_gr, params_act, len(t), t) 
     
+    print("freq planet : ",freq_pl)
     time_series[:,0] = y_noise #Without planet
     LS[:,0,:], label[0,:] = generate_4_periodogrammes(t, freq, y_noise, freq_pl) #Without planet
     
     for i in range(1,5):
-        print(freq_pl)
-        Ppl = random.uniform(10*dt,Ttot/2)
-        K = loguniform.rvs(0.1, 10)*5
+        Ppl = 1/(i*0.1)#random.uniform(10*dt,Ttot/2)
+        K = loguniform.rvs(0.1, 10)*10
         T0 =  random.uniform(0,Ppl)
         params_pl = [Ppl,K,T0]
-        freq_pl[i] = round(1/Ppl,3)
+        freq_pl[i-1] = round(1/Ppl,3)
+        print("freq planet : ",freq_pl)
         
         y_pl = generate_planete(params_pl, t)
         y_tot = y_pl + time_series[:,i-1]
         time_series[:,i] = y_tot
         LS[:,i,:], label[i,:] = generate_4_periodogrammes(t, freq, y_tot,freq_pl)
-      
-    return time_series, LS, label
+        
+        
+    return time_series, LS, label, freq_pl
 
 
 #%%
@@ -248,7 +291,7 @@ fmax = (1/dt)/2
 freq = np.arange(fmin,fmax,fmin/10)
 
 #%%
-time_series, LS, label = generate_data(t, dt, Ttot, freq, params_gr, params_act)
+time_series, LS, label, freq_pl = generate_data(t, dt, Ttot, freq, params_gr, params_act)
 
 # --- Time series contains 5 RV generated with the same noise (activity stelar), with adding
 #consecutively planet until 4 planets were injected
@@ -257,6 +300,10 @@ time_series, LS, label = generate_data(t, dt, Ttot, freq, params_gr, params_act)
 # --- label contains 1 if the best frequency removed from the periodogramme is a frequency
 # correspond to a planet
 
+plt.close('all')
+print_4periodogramme(LS, label,4, freq_pl)
+
+#%%
 
 
 

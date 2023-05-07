@@ -204,9 +204,8 @@ for i in range(1,5):
     freq_pl[i] = 1/Ppl
     
     y_pl = generate_planete(params_pl, t_ir)
-    y_tot = y_pl + time_series[:,i-1]
-    time_series[:,i] = y_tot
-    LS[:,i] = LombScargle(t_ir, y_tot,normalization='standard').power(freq,method='cython')
+    time_series[:,i] = y_pl + time_series[:,i-1]
+    LS[:,i] = LombScargle( t_ir, time_series[:,i],normalization='standard').power(freq,method='cython')
   
     
     
