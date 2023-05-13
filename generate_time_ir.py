@@ -115,7 +115,7 @@ def generate_regular_data_H0(params_gr, params_act, N, t):
 
     # =========================================================================
     # Generate the final synthetic time series
-    # activity + granulation + the intrinsic errors + planet if params_pl
+    # activity + granulation + the intrinsic errors 
     ytot = ygr + yact + yerr * np.random.randn(N)
     
     return ytot, yerr
@@ -130,6 +130,37 @@ def generate_planete(params_pl,t):
     """
     Ppl, K, T0 = params_pl
     return K*np.sin(2*np.pi*(t-T0)/Ppl)
+
+
+def LSfitw(y,M,Sigma_inv):
+    #finds beta such that ||y-M*beta||*2 is minimal but with diagonal weight
+    #Sigma_inv should be Sigma^^(-1/2) so iv std matrix
+    Mt = np.dot(Sigma_inv,M)
+    yt = np.dot(Sigma_inv,y)
+    A =np.dot(Mt.T,Mt) # this and the following steps implement the LS iversion formula
+    B = np.dot(Mt.T,yt)
+    betaest = np.dot(np.linalg.inv(A),B)
+    yest = np.dot(M,betaest)
+    return yest
+
+
+def my_GLS(t,y,EB, periods):
+    Sigma_inv = np.diagflat(1./EB)
+    power=[]
+    N = len(t)
+    un = np.ones(np.shape(y)) # a vector of ones
+    unt = np.dot(Sigma_inv,un)
+    yt = np.dot(Sigma_inv,y)
+    yest0 = (np.dot(yt,unt))/(np.dot(unt,unt))*un
+    RSS0 = np.sum(((y-yest0)/EB)**2)
+    for i in range(len(periods)):
+        # create M0 = constant
+        # create M1 = constant + sinusoid
+        M1 = (np.concatenate(([un], [np.cos(2*np.pi*t/periods[i])], [np.sin(2*np.pi*t/periods[i])]), axis=0)).T # the design matric M : shape is 20 *2        
+        yest1 = LSfitw(y,M1,Sigma_inv)
+        RSS1 = np.sum(((y-yest1)/EB)**2)
+        power.append((RSS0-RSS1)/RSS0)
+    return power
 
 #%%
 #Over-sampling
@@ -189,9 +220,9 @@ params_act = [amp, gam, logP, met]
 
 ##Planet
 Ppl = 50
-K=5
+K=1
 T0 = Ppl/2
-# Ppl = random.uniform(10*dt,Ttot/2)
+# Ppl = random.uniform(10*np.min(np.diff(t_ir1)),Ttot/2)
 # K = loguniform.rvs(0.1, 10)
 # T0 =  random.uniform(0,Ppl)
 
@@ -201,7 +232,9 @@ params_pl = [Ppl,K,T0]
 
 #%%
 #Create the time series
+start = time.time()
 y_noise, yerr = generate_regular_data_H0(params_gr, params_act, N, t)
+diff2 = time.time() - start
 y_noise1, yerr_ir1 = generate_regular_data_H0(params_gr, params_act, Ttot, t_ir1)
 y_noise2, yerr_ir2 = generate_regular_data_H0(params_gr, params_act, Ttot, t_ir2)
 
@@ -215,9 +248,9 @@ if (params_pl !=0):
     y = ypl + y_noise
     
 else:
+    y = y_noise
     y_ir1 = y_noise1
     y_ir2 = y_noise2
-    y = y_noise
 
 #%%
 #Plot
@@ -243,19 +276,20 @@ fmax = (1/dt)/2
 freq = np.arange(fmin,fmax,fmin/10)
 
 #Irregular sampling 1
-start = time.time()
-GLS_ir1 = LombScargle(t_ir1, y_ir1,sigma1*np.ones(len(y_ir1)),normalization='standard').power(freq,method='cython')
-diff2 = time.time() - start
+GLS_ir1 = LombScargle(t_ir1, y_ir1,normalization='standard').power(freq,method='cython')
+GLS_ir1_2 = my_GLS(t_ir1, y_ir1, np.ones(len(t_ir1)), 1/freq)
 
 #Irregular sampling 2
-GLS_ir2 = LombScargle(t_ir2, y_ir2,sigma2*np.ones(len(y_ir2)),normalization='standard').power(freq,method='cython')
+GLS_ir2 = LombScargle(t_ir2, y_ir2,normalization='standard').power(freq,method='cython')
+GLS_ir2_2 = my_GLS(t_ir2, y_ir2, np.ones(len(t_ir1)), 1/freq)
+
 
 #plot
 plt.figure(2)
 plt.suptitle("Lomb-Scargle periodograme")
 plt.subplot(121)
 plt.plot(freq,GLS_ir1,label='Quasi uniformly time sampling')
-plt.plot(freq,GLS_ir2,label='Randomly sampling')
+#plt.plot(freq,GLS_ir2,label='Randomly sampling')
 
 if(params_pl != 0):    
     plt.plot([(1/Ppl),(1/Ppl)],[min(min(GLS_ir1),min(GLS_ir2)), max(max(GLS_ir1),max(GLS_ir2))],'r--')
@@ -272,5 +306,30 @@ if(params_pl != 0):
     plt.plot([(Ppl),(Ppl)],[min(min(GLS_ir1),min(GLS_ir2)), max(max(GLS_ir1),max(GLS_ir2))],'r--')
 
 plt.xlabel("Time (days)")
+plt.ylabel("Amplitude(m/s)²")
+plt.legend()
+
+
+plt.figure(3)
+plt.suptitle("Verif Lomb-Scargle periodograme")
+plt.subplot(121)
+plt.plot(freq,GLS_ir1,label='Quasi uniformly time sampling python function')
+plt.scatter(freq,GLS_ir1_2,label='Quasi uniformly time sampling homemade function',s=5,c='r')
+
+if(params_pl != 0):    
+    plt.plot([(1/Ppl),(1/Ppl)],[min(min(GLS_ir1),min(GLS_ir2)), max(max(GLS_ir1),max(GLS_ir2))],'r--')
+
+plt.xlabel("Frequence [d⁻¹]")
+plt.ylabel("Amplitude(m/s)²")
+plt.legend()
+
+plt.subplot(122)
+plt.plot(freq,GLS_ir2,label='Random time sampling python function')
+plt.scatter(freq,GLS_ir2_2,label='Random time sampling homemade function',s=5,c='r')
+
+if(params_pl != 0):    
+    plt.plot([(1/Ppl),(1/Ppl)],[min(min(GLS_ir1),min(GLS_ir2)), max(max(GLS_ir1),max(GLS_ir2))],'r--')
+
+plt.xlabel("Frequence [d⁻¹]")
 plt.ylabel("Amplitude(m/s)²")
 plt.legend()
