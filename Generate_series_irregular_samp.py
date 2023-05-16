@@ -137,7 +137,6 @@ facteur_surech = 10
 N = Ttot*facteur_surech +1 # number of data point in a regularly sampled grid
 t = np.linspace(0,Ttot,N) #days
 
-
 #%%
 #Parameters for time series
 ## Grannulation + Oscillation
@@ -167,7 +166,7 @@ params_act = [amp, gam, logP, met]
 ##Planet
 dt = Ttot*facteur_surech/(N-1)
 Ppl = 50
-K=5
+K=1
 T0 = Ppl/2
 # Ppl = random.uniform(10*dt,Ttot/2)
 # K = loguniform.rvs(0.1, 10)
@@ -257,7 +256,7 @@ plt.figure(2)
 plt.suptitle("Lomb-Scargle periodograme")
 plt.subplot(121)
 plt.plot(freq,GLS_ir1,label='Quasi uniformly time sampling')
-plt.plot(freq,GLS_ir2,label='Randomly sampling')
+#plt.plot(freq,GLS_ir2,label='Randomly sampling')
 
 if(params_pl != 0):    
     plt.plot([(1/Ppl),(1/Ppl)],[min(min(GLS_ir1),min(GLS_ir2)), max(max(GLS_ir1),max(GLS_ir2))],'r--')

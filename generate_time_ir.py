@@ -105,7 +105,7 @@ def generate_regular_data_H0(params_gr, params_act, N, t):
     gp = george.GP(k)
 
     # generate synthetic dataset
-    yact = gp.sample(t)
+    yact = gp.sample(ts)
     
     # =========================================================================
     # Generate the intrincsic errors
@@ -204,7 +204,7 @@ cste        = 1.4e-4 # (m/s)**2/Hz
 params_gr = [A1, A2, A3, B1, B2, B3, C1, C2, C3, AL, Gm, nu0, cste]
 
 ##Activity signal
-Prot = 62 # days -- Prot to be chosen randomly in HARPS sample (see paper)
+Prot = 62*3600*24 # days -- Prot to be chosen randomly in HARPS sample (see paper)
 
 amp = 5
 epsilon = 1

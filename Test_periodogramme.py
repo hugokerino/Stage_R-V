@@ -11,7 +11,9 @@ from astropy.timeseries import LombScargle
 from scipy.integrate import simps
 import time
 
+
 def lorentzian_components(params_gr, t_d):
+    
     '''
     Simulated effects of pulsations and granulations
     
@@ -38,9 +40,11 @@ def lorentzian_components(params_gr, t_d):
     
     VPSD = (A1 / (1+(B1*freq)**C1) + A2 / (1+(B2*freq)**C2) +  A3 / (1+(B3*freq)**C3) + \
                 AL * (Gm**2/((freq-nu0)**2+Gm**2)) +  cste  ) 
-    # VPSD /= 1e6     # units of VPSD is (m/s)**2/Hz
-    #VPSD = VPSD_ / (freq[-1]-freq[0])
+    
+    #VPSD /= 1e6     # units of VPSD is (m/s)**2/Hz
+    VPSD *= (freq[-1]-freq[0])*10e6
     # take random phase between 0 and 2pi
+    
     phase = 2*np.pi*np.random.rand(1,len(VPSD))
     
     # Synthetic radial velocity measurements
@@ -74,7 +78,7 @@ diff = time.time() - start
 print(diff)
 
 #Gneration of many time series and their periodogramme
-Nbr_test = 50
+Nbr_test = 1000
 P = []
 P_GLS = []
 Y = []
@@ -105,15 +109,13 @@ plt.subplot(515), plt.plot(freq_g, P_GLS_moy ), plt.title("GLS moyenné")
 
 
 plt.figure(2)
-plt.plot(freq, DSP_cible*len(freq)/2, label='DSP theorique')
-plt.plot(freq_p, P_moy,     label='Periodogramme moyenne')
+plt.plot(freq, DSP_cible*(len(freq)/2)+2, label='DSP theorique')
+plt.plot(freq_p, P_moy,     label='Periodogramme moyenne')  
 plt.plot(freq_g, P_GLS_moy, label = 'GLS moyenne')
 plt.xlabel("frequence (Hz)")
 plt.ylabel("Amplitude (m/s)**2")
 plt.legend()
 
-#%%
+
 plt.figure(3)
-plt.plot(t,Y_moy, label ="serie temporelle moyenné")
-plt.plot(t,y_real, label ="serie temporelle")
-plt.legend()
+plt.plot(freq, P[0], label='ex DSP')
